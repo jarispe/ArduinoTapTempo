@@ -27,10 +27,12 @@
 
 #include <Arduino.h>
 
-class ArduinoTapTempo
+class ArduinoTapTempoMicros
 {
   public:
     static const int MAX_TAP_VALUES = 10;
+    static const unsigned long sixtySeconds =  60000000UL;
+    static const unsigned long microsRollover = 4294967295UL;
 
     bool onBeat(); // returns true if a beat has occured since the last update(), not accurate enough for timing in music but useful for LEDs or other indicators
     // Note that this may return true in rapid succession while tapping and setting the tempo to a slightly slower rate than the current tempo,
@@ -38,8 +40,11 @@ class ArduinoTapTempo
     bool isChainActive(); // returns true if the current tap chain is still accepting new taps to fine tune the tempo
     bool isChainActive(unsigned long ms); // returns true if the current tap chain is still accepting new taps to fine tune the tempo
     float getBPM(); // returns the number of beats per minute
-    float setBPM(float bpm); // sets the number of beats per minute
-    float beatProgress(); // returns a float from 0.0 to 1.0 indicating the percent through the current beat
+    void setBPM(float setBpm); // sets the number of beats per minute
+    void setBPM (unsigned long ms);
+    double getBeatFract();
+    void setSigFigs(unsigned short setSigFigs);
+    double beatProgress(); // returns a float from 0.0 to 1.0 indicating the percent through the current beat
     void resetTapChain(); // resets the current chain of taps and sets the start of the bar to the current time
     void resetTapChain(unsigned long ms); // resets the current chain of taps and sets the start of the bar to the current time
 
@@ -62,33 +67,38 @@ class ArduinoTapTempo
     // If a tap attempts to set the beat length to anything greater than this value, the new tap will start a new chain and the tempo will remain unchanged.
     inline void setMinBeatLengthMS(unsigned long ms) { minBeatLengthMS = ms; } // Sets the minimum beat length permissible.
     // If the average tap length is less than this value, then this value will be used instead.
-    inline void setMaxBPM(float bpm) { minBeatLengthMS = 60000.0 / bpm; } // Sets the minimum beats per minute permissible.
+    inline void setMaxBPM(float bpm) { minBeatLengthMS = sixtySeconds / bpm; } // Sets the minimum beats per minute permissible.
     // This is another way of setting the minimum beat length.
-    inline void setMinBPM(float bpm) { maxBeatLengthMS = 60000.0 / bpm; } // Sets the maximum beats per minute permissible.
+    inline void setMinBPM(float bpm) { maxBeatLengthMS = sixtySeconds / bpm; } // Sets the maximum beats per minute permissible.
     // This is another way of setting the maximum beat length.
 
 
   private:
     // config
-    unsigned long maxBeatLengthMS = 2000; // 30.0bpm
-    unsigned long minBeatLengthMS = 250; // 240.0bpm
+    unsigned long maxBeatLengthMS = 2000000UL; // 30.0bpm
+    unsigned long minBeatLengthMS = 250000UL; // 240.0bpm
     int beatsUntilChainReset = 3;
     int totalTapValues = 8;
     float skippedTapThresholdLow = 1.75;
     float skippedTapThresholdHigh = 2.75;
+    unsigned short sigFigs = 1; //1 is default such as 120.5, 0 is interger only, max is 3 such as 120.543
+    
 
     // button state
     bool buttonDownOld = false;
 
     // timing
-    unsigned long millisSinceReset = 0;
-    unsigned long millisSinceResetOld = 0;
-    unsigned long beatLengthMS = 500;
-    unsigned long lastResetMS = millis();
+    unsigned long microsSinceReset = 0UL;
+    unsigned long microsSinceResetOld = 0UL;
+    unsigned long beatLengthMS = 500000; //default tempo of 120 BPM
+    double beatFract = 0.0;
+    float bpm = 120.0;
+    unsigned long lastResetMS = micros();
+    bool errorCorrection = false;
     
     // taps
     unsigned long lastTapMS = 0;
-    unsigned long tapDurations[ArduinoTapTempo::MAX_TAP_VALUES];
+    unsigned long tapDurations[ArduinoTapTempoMicros::MAX_TAP_VALUES];
     int tapDurationIndex = 0;
     int tapsInChain = 0;
     bool skippedTapDetection = true;
@@ -101,3 +111,4 @@ class ArduinoTapTempo
 };
 
 #endif
+

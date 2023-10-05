@@ -23,65 +23,132 @@
  * SOFTWARE.  
  */
 
+/*
+ MIT License still applies
+ This fork is an update to calculate BPM using micros() instead of millis() to provide a more accurate BPM
+ Please note that not all Arduino platforms have an accurate micro resolution. https://www.arduino.cc/reference/en/language/functions/time/micros/
+ Double check your platform has the proper resolution or calculations may be inaccurate
+*/
+
 #include <Arduino.h>
-#include "ArduinoTapTempo.h"
+#include "ArduinoTapTempoMicros.h"
 
-void ArduinoTapTempo::setSkippedTapThresholdLow(float threshold)
+void ArduinoTapTempoMicros::setSkippedTapThresholdLow(float threshold)
 {
-  if(threshold > 1.0 && threshold < 2.0)
+  if(threshold >= 1.0 && threshold <= 2.0){
     skippedTapThresholdLow = threshold;
+  } else if (threshold < 1.0) {
+    skippedTapThresholdLow = 1.0;
+  } else {
+    skippedTapThresholdLow = 2.0;
+  }
 }
 
-void ArduinoTapTempo::setSkippedTapThresholdHigh(float threshold)
+void ArduinoTapTempoMicros::setSkippedTapThresholdHigh(float threshold)
 {
-  if(threshold > 2.0 && threshold < 4.0)
+  if(threshold >= 2.0 && threshold <= 4.0){
     skippedTapThresholdHigh = threshold;
+  }else if (threshold < 2.0) {
+    skippedTapThresholdHigh =  2.0;
+  } else {
+    skippedTapThresholdHigh = 4.0;
+  }
+  
 }
 
-float ArduinoTapTempo::getBPM()
+float ArduinoTapTempoMicros::getBPM()
 {
-  return 60000.0 / beatLengthMS;
+  return bpm;
 }
 
-float ArduinoTapTempo::setBPM(float bpm)
+
+
+//This can be used to calculate how many beats until your timing is ahead by x micros for even more precision
+//ex: In your program, every beat add this value and check to see if a whole number (x) has been reached. 
+//Once it has, you're now x micros ahead and need to add as many to stay on beat.
+double ArduinoTapTempoMicros::getBeatFract()
 {
-  beatLengthMS = 60000 / bpm;
+  return beatFract;
 }
 
-bool ArduinoTapTempo::onBeat()
+
+void ArduinoTapTempoMicros::setSigFigs(unsigned short setSigFigs)
 {
-  return fmod((float)millisSinceReset, (float)beatLengthMS) < fmod((float)millisSinceResetOld, (float)beatLengthMS);
+  if (setSigFigs < 4) {
+    sigFigs = setSigFigs;
+  } else {
+    sigFigs = 3;
+  }
 }
 
-bool ArduinoTapTempo::isChainActive()
+
+void ArduinoTapTempoMicros::setBPM(float setBpm)
 {
-  return isChainActive(millis());
+    bpm = setBpm;
+    double tempMS = 0.0;
+    beatFract = modf(double(sixtySeconds / setBpm),&tempMS );
+    beatLengthMS = (unsigned long)(tempMS);
+
+
 }
 
-bool ArduinoTapTempo::isChainActive(unsigned long ms)
+
+void ArduinoTapTempoMicros::setBPM(unsigned long ms)
+{
+  switch(sigFigs){
+    case 0: 
+      bpm = floor((double)(sixtySeconds/ms + 0.5));
+      break;
+    case 1:
+      bpm = floor((double)(sixtySeconds/ms *10 + 0.5)) / 10;
+      break;
+    case 2:
+      bpm = floor((double)(sixtySeconds/ms *100 + 0.5)) / 100;
+      break;
+    case 3:
+      bpm = floor((double)(sixtySeconds/ms *1000 + 0.5)) / 1000;
+      break;
+    default:
+      bpm = floor((double)(sixtySeconds/ms + 0.5));
+      break;
+  }
+}
+
+
+bool ArduinoTapTempoMicros::onBeat()
+{
+  return fmod((double)microsSinceReset, (double)beatLengthMS) < fmod((double)microsSinceResetOld, (double)beatLengthMS);
+}
+
+bool ArduinoTapTempoMicros::isChainActive()
+{
+  return isChainActive(micros());
+}
+
+bool ArduinoTapTempoMicros::isChainActive(unsigned long ms)
 {
   return lastTapMS + maxBeatLengthMS > ms && lastTapMS + (beatLengthMS * beatsUntilChainReset) > ms;
 }
 
-float ArduinoTapTempo::beatProgress()
+double ArduinoTapTempoMicros::beatProgress()
 {
-  return fmod((float)millisSinceReset / (float)beatLengthMS, 1.0);
+  return fmod((double)microsSinceReset / (double)beatLengthMS, 1.0);
 }
 
-void ArduinoTapTempo::update(bool buttonDown)
+void ArduinoTapTempoMicros::update(bool buttonDown)
 {
-  unsigned long ms = millis();
+  unsigned long ms = micros();
 
   // if a tap has occured...
   if(buttonDown && !buttonDownOld)
     tap(ms);
 
   buttonDownOld = buttonDown;
-  millisSinceResetOld = millisSinceReset;
-  millisSinceReset = ms - lastResetMS;
+  microsSinceResetOld = microsSinceReset;
+  microsSinceReset = ms - lastResetMS;
 }
 
-void ArduinoTapTempo::tap(unsigned long ms)
+void ArduinoTapTempoMicros::tap(unsigned long ms)
 {
   // start a new tap chain if last tap was over an amount of beats ago
   if(!isChainActive(ms))
@@ -90,10 +157,17 @@ void ArduinoTapTempo::tap(unsigned long ms)
   addTapToChain(ms);
 }
 
-void ArduinoTapTempo::addTapToChain(unsigned long ms)
+void ArduinoTapTempoMicros::addTapToChain(unsigned long ms)
 {
+
+  unsigned long duration = 0;
   // get time since last tap
-  unsigned long duration = ms - lastTapMS;
+  //rollover check
+  if (ms > lastTapMS){
+    duration = ms - lastTapMS;
+  } else {
+    duration = microsRollover - lastResetMS + 1 + ms;
+  }
 
   // reset beat to occur right now
   lastTapMS = ms;
@@ -125,14 +199,15 @@ void ArduinoTapTempo::addTapToChain(unsigned long ms)
   }
   
   beatLengthMS = getAverageTapDuration();
+  setBPM(beatLengthMS);
 }
 
-void ArduinoTapTempo::resetTapChain()
+void ArduinoTapTempoMicros::resetTapChain()
 {
-  resetTapChain(millis());
+  resetTapChain(micros());
 }
 
-void ArduinoTapTempo::resetTapChain(unsigned long ms)
+void ArduinoTapTempoMicros::resetTapChain(unsigned long ms)
 {
   tapsInChain = 0;
   tapDurationIndex = 0;
@@ -142,7 +217,7 @@ void ArduinoTapTempo::resetTapChain(unsigned long ms)
   }
 }
 
-unsigned long ArduinoTapTempo::getAverageTapDuration()
+unsigned long ArduinoTapTempoMicros::getAverageTapDuration()
 {
   int amount = tapsInChain - 1;
   if(amount > totalTapValues)
@@ -159,7 +234,7 @@ unsigned long ArduinoTapTempo::getAverageTapDuration()
   return avgTapDurationMS;
 }
 
-void ArduinoTapTempo::setBeatsUntilChainReset(int beats)
+void ArduinoTapTempoMicros::setBeatsUntilChainReset(int beats)
 {
   if(beats < 2)
   {
@@ -168,15 +243,15 @@ void ArduinoTapTempo::setBeatsUntilChainReset(int beats)
   beatsUntilChainReset = beats;
 }
 
-void ArduinoTapTempo::setTotalTapValues(int total)
+void ArduinoTapTempoMicros::setTotalTapValues(int total)
 {
   if(total < 2)
   {
     total = 2;
   }
-  else if(total > ArduinoTapTempo::MAX_TAP_VALUES)
+  else if(total > ArduinoTapTempoMicros::MAX_TAP_VALUES)
   {
-    total = ArduinoTapTempo::MAX_TAP_VALUES;
+    total = ArduinoTapTempoMicros::MAX_TAP_VALUES;
   }
   totalTapValues = total;
 }
