@@ -2,6 +2,12 @@
 
 ![ArduinoTapTempo](https://user-images.githubusercontent.com/345320/50956952-1d32b300-1511-11e9-816a-cdcb1c9bf82e.jpg)
 
+Updated to allow use of micros() over millis() for microcontrollers that have that functionality. 
+
+
+
+ORIGINAL USE BELOW, read in code comments for new usages.
+
 An Arduino library that times consecutive button presses to calculate a tempo. Corrects for missed beats and can reset phase with single taps.
 
 How do you use it? Just tap a button in time with some music. This'll work out the tempo and keep track of it internally. Single taps will reset the phase so the bar begins from the start again. Mutiple taps will average out and give you a more accurate tempo reading. If you miss a tap this will detect it and prevent a tempo change.
